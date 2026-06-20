@@ -231,7 +231,7 @@ async function bootstrap() {
   });
 }
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && !process.env.NETLIFY && !process.env.LAMBDA) {
   bootstrap();
 }
 
