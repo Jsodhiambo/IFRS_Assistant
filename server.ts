@@ -30,8 +30,11 @@ function getGenAI(): GoogleGenAI {
   return genAIClient;
 }
 
-// Check Endpoint
-app.get("/api/health", (req, res) => {
+// Express Router for API Endpoints to handle prefix mismatches (e.g., direct local dev vs Netlify function proxy prefix-stripping)
+const apiRouter = express.Router();
+
+// Health check
+apiRouter.get("/health", (req, res) => {
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
@@ -40,7 +43,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Endpoint: Evaluate Accounting Compliance
-app.post("/api/compliance/check", async (req, res) => {
+apiRouter.post("/compliance/check", async (req, res) => {
   try {
     const { 
       transactionDescription, 
@@ -152,7 +155,7 @@ Provide the findings, compliance rating, corrective manual ledger adjustments (D
 });
 
 // Endpoint: Conversational Technical Accounting Advisor (Drill-down Clarification)
-app.post("/api/advisor/query", async (req, res) => {
+apiRouter.post("/advisor/query", async (req, res) => {
   try {
     const { query, standardId, transactionContext, history } = req.body;
 
@@ -206,6 +209,10 @@ Be supportive, technical, and precise. Avoid casual filler.`;
     });
   }
 });
+
+// Mount the prefix-tolerant Router under both standard API path and root path
+app.use("/api", apiRouter);
+app.use(apiRouter);
 
 // Setup Vite Dev server / production serving
 async function bootstrap() {

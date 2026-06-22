@@ -569,16 +569,56 @@ How can I guide your accounting preparation or audit files today?`
                   placeholder="Search standards..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && filteredStandards.length > 0) {
+                      setActiveDrilldownStandard(filteredStandards[0]);
+                      setDrilldownRef({ type: "general", id: "overview" });
+                      setActiveTab("library");
+                      setSearchQuery("");
+                    }
+                  }}
                   className="bg-[#F1F3F5] border border-[#DCDDE1] rounded pl-7 pr-3 py-1 text-xs w-24 sm:w-32 focus:w-40 transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-[#0B192C]"
                 />
                 {searchQuery && (
-                  <button 
-                    id="search_clear_btn"
-                    onClick={() => setSearchQuery("")} 
-                    className="absolute right-2 top-1.5 hover:bg-gray-200 p-0.5 rounded"
-                  >
-                    <X className="w-2.5 h-2.5 text-[#7F8C8D]" />
-                  </button>
+                  <>
+                    <button 
+                      id="search_clear_btn"
+                      onClick={() => setSearchQuery("")} 
+                      className="absolute right-2 top-1.5 hover:bg-gray-200 p-0.5 rounded"
+                    >
+                      <X className="w-2.5 h-2.5 text-[#7F8C8D]" />
+                    </button>
+                    
+                    {/* Interactive Dropdown Search Results */}
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-[#DCDDE1] rounded shadow-lg z-50 overflow-hidden max-h-60 overflow-y-auto text-xs" id="search_results_dropdown">
+                      <div className="p-1 px-2.5 bg-gray-50 text-[10px] text-[#7F8C8D] font-bold uppercase tracking-wider border-b border-[#DCDDE1] flex justify-between items-center" id="search_results_hdr">
+                        <span>Standards ({filteredStandards.length})</span>
+                        <span className="text-[9px] lowercase font-normal italic">Press Enter to select</span>
+                      </div>
+                      {filteredStandards.map((std) => (
+                        <button
+                          key={std.id}
+                          type="button"
+                          id={`search_match_btn_${std.id}`}
+                          onClick={() => {
+                            setActiveDrilldownStandard(std);
+                            setDrilldownRef({ type: "general", id: "overview" });
+                            setActiveTab("library");
+                            setSearchQuery("");
+                          }}
+                          className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex flex-col gap-0.5 border-b border-gray-100 last:border-none transition-colors"
+                        >
+                          <span className="font-mono font-bold text-[#0B192C]">{std.code}</span>
+                          <span className="text-[10px] text-gray-500 truncate">{std.title}</span>
+                        </button>
+                      ))}
+                      {filteredStandards.length === 0 && (
+                        <div className="p-3 text-center text-gray-400 italic" id="search_no_results">
+                          No standards found
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
               <div className="flex items-center gap-1 bg-gray-100 py-1 px-2 rounded text-[10px] border border-[#DCDDE1] font-mono shrink-0 select-none" id="engagement_token">
