@@ -77,7 +77,7 @@ You must respond in a strict JSON format matching the schema provided. Be highly
 Provide the findings, compliance rating, corrective manual ledger adjustments (Dr/Cr) and step-by-step auditing validation logic.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: instructions,
       config: {
         systemInstruction: systemPrompt,
@@ -143,7 +143,18 @@ Provide the findings, compliance rating, corrective manual ledger adjustments (D
     });
 
     const reportText = response.text || "{}";
-    res.json(JSON.parse(reportText));
+    let parsedData;
+    try {
+      let cleaned = reportText.trim();
+      if (cleaned.startsWith("```")) {
+        cleaned = cleaned.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "").trim();
+      }
+      parsedData = JSON.parse(cleaned);
+    } catch (parseError) {
+      console.error("JSON parse failure, falling back. Raw text was:", reportText);
+      throw new Error("Failed to parse compliance check response as structured JSON. Please try again.");
+    }
+    res.json(parsedData);
 
   } catch (error: any) {
     console.error("Compliance Check Error:", error);
@@ -191,7 +202,7 @@ Be supportive, technical, and precise. Avoid casual filler.`;
     ];
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents,
       config: {
         systemInstruction,
