@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -10,12 +11,23 @@ app.use(express.json({ limit: "10mb" }));
 
 const PORT = 3000;
 
+function logDebug(message: string, obj?: any) {
+  const line = `[${new Date().toISOString()}] ${message} ${obj ? JSON.stringify(obj) : ""}\n`;
+  try {
+    fs.appendFileSync(path.join(process.cwd(), "applet_debug.log"), line);
+    console.log(line.trim());
+  } catch (err) {
+    console.error("Failed to write to applet_debug.log:", err);
+  }
+}
+
 // Lazy-loaded Gemini AI client
 let genAIClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI {
   if (!genAIClient) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
+      logDebug("ERROR: GEMINI_API_KEY is missing in env!");
       throw new Error("GEMINI_API_KEY is missing. Please configure it in the Secrets manager of your AI Studio environment.");
     }
     genAIClient = new GoogleGenAI({
@@ -53,7 +65,15 @@ apiRouter.post("/compliance/check", async (req, res) => {
       financialDisclosures 
     } = req.body;
 
+    logDebug("POST /compliance/check starting", { 
+      transactionDescLen: transactionDescription?.length, 
+      accountingPolicyLen: accountingPolicy?.length,
+      selectedStandards,
+      accountsDataCount: accountsData?.length
+    });
+
     if (!transactionDescription && !accountingPolicy) {
+      logDebug("POST /compliance/check failed validation: missing fields");
       return res.status(400).json({ error: "Please provide either a transaction description or an accounting policy excerpt for analysis." });
     }
 
@@ -151,12 +171,16 @@ Provide the findings, compliance rating, corrective manual ledger adjustments (D
       }
       parsedData = JSON.parse(cleaned);
     } catch (parseError) {
+      logDebug("POST /compliance/check JSON parse error. reportText raw prefix:", reportText.substring(0, 500));
       console.error("JSON parse failure, falling back. Raw text was:", reportText);
       throw new Error("Failed to parse compliance check response as structured JSON. Please try again.");
     }
+    
+    logDebug("POST /compliance/check success payload generated");
     res.json(parsedData);
 
   } catch (error: any) {
+    logDebug("POST /compliance/check caught exception:", error.message || error);
     console.error("Compliance Check Error:", error);
     res.status(500).json({ 
       error: error.message || "An unexpected error occurred during database analysis.",
@@ -170,7 +194,10 @@ apiRouter.post("/advisor/query", async (req, res) => {
   try {
     const { query, standardId, transactionContext, history } = req.body;
 
+    logDebug("POST /advisor/query starting", { query, standardId, transactionContextLen: transactionContext?.length });
+
     if (!query) {
+      logDebug("POST /advisor/query failed validation: missing query");
       return res.status(400).json({ error: "Query is required" });
     }
 
@@ -187,19 +214,51 @@ Keep your answers highly structured (using Markdown):
 
 Be supportive, technical, and precise. Avoid casual filler.`;
 
-    // Process chat history if present
-    const formattedHistory = (history || []).map((msg: any) => ({
+    // Process chat history if present, filtering out any empty messages
+    let historyTurns = (history || []).map((msg: any) => ({
       role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }]
-    }));
+      parts: [{ text: msg.content || "" }]
+    })).filter((turn: any) => turn.parts[0].text.trim() !== "");
 
-    const contents = [
-      ...formattedHistory,
-      {
-        role: "user",
-        parts: [{ text: `Context: Active standard is ${standardId || "General IFRS/IAS guidance"}. Other transaction details: ${transactionContext || "None"}. Question: ${query}` }]
+    // Filter history to ensure it alternates correctly starting with "user"
+    // Rule 1: History must start with a "user" turn. Skip any initial "model" turns.
+    while (historyTurns.length > 0 && historyTurns[0].role !== "user") {
+      historyTurns.shift();
+    }
+
+    // Rule 2 & 3: Alternating turns, combining consecutive turns of the same role.
+    const cleanedHistory: any[] = [];
+    for (const turn of historyTurns) {
+      if (cleanedHistory.length === 0) {
+        cleanedHistory.push(turn);
+      } else {
+        const lastTurn = cleanedHistory[cleanedHistory.length - 1];
+        if (lastTurn.role === turn.role) {
+          // Combine consecutive messages of same role
+          lastTurn.parts[0].text += "\n" + turn.parts[0].text;
+        } else {
+          cleanedHistory.push(turn);
+        }
       }
-    ];
+    }
+
+    // Now append the active user query at the end
+    const lastUserTurn = {
+      role: "user" as const,
+      parts: [{ text: `Context: Active standard is ${standardId || "General IFRS/IAS guidance"}. Other transaction details: ${transactionContext || "None"}. Question: ${query}` }]
+    };
+
+    const contents: any[] = [];
+    if (cleanedHistory.length > 0) {
+      // Ensure the history ends with "model" so the new active "user" query alternates correctly
+      if (cleanedHistory[cleanedHistory.length - 1].role === "user") {
+        // If history ended on "user", combine it with the active user query
+        const lastHistTurn = cleanedHistory.pop();
+        lastUserTurn.parts[0].text = lastHistTurn.parts[0].text + "\n" + lastUserTurn.parts[0].text;
+      }
+      contents.push(...cleanedHistory);
+    }
+    contents.push(lastUserTurn);
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -210,9 +269,11 @@ Be supportive, technical, and precise. Avoid casual filler.`;
       }
     });
 
+    logDebug("POST /advisor/query successful response retrieved");
     res.json({ text: response.text || "Could not retrieve advice." });
 
   } catch (error: any) {
+    logDebug("POST /advisor/query caught exception:", error.message || error);
     console.error("Advisor Query Error:", error);
     res.status(500).json({ 
       error: error.message || "An unexpected error occurred on the advisor query.",
