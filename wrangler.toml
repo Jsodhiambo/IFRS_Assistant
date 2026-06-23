@@ -1,0 +1,18 @@
+name = "ifrsassistant"
+main = "./worker/index.ts"
+compatibility_date = "2026-06-23"
+
+# The Worker only needs to run for API calls. Everything else is served
+# straight from the Vite build output as static assets.
+[assets]
+# directory is intentionally omitted: the Cloudflare Vite plugin automatically
+# points this at the client build output, and a manually-set value is ignored.
+not_found_handling = "single-page-application"
+# Belt-and-suspenders: guarantees the Worker always handles /api/* even if a
+# same-named static file ever ends up in the build output.
+run_worker_first = ["/api/*"]
+
+# GEMINI_API_KEY is intentionally NOT set here — it's a secret, configured with:
+#   wrangler secret put GEMINI_API_KEY
+# (Never commit API keys into wrangler.toml or source control.)
+

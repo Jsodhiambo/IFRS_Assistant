@@ -1,0 +1,6 @@
+{
+  "name": "Accounting Compliance Advisor",
+  "description": "An interactive hub for professional accountants to query IAS/IFRS standards, search case studies, perform client file compliance checks, and analyze transaction disclosures with Gemini-powered advisory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
